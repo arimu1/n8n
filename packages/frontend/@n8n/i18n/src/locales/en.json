@@ -6388,5 +6388,12 @@
 	"instanceAi.welcomeModal.gateway.instructions.windows": "Open Terminal (Windows key, type \"Terminal\") and paste the command below.",
 	"instanceAi.welcomeModal.gateway.instructions.linux": "Open your terminal and paste the command below.",
 	"instanceAi.welcomeModal.gateway.tokenExpiresIn": "Token expires in {minutes} min",
-	"instanceAi.welcomeModal.gateway.tokenExpired": "Token has expired. Copy the command again."
+	"instanceAi.welcomeModal.gateway.tokenExpired": "Token has expired. Copy the command again.",
+	"generic.disconnect": "Disconnect",
+	"agents.channels.modal.title": "Channels",
+	"agents.channels.modal.connectTitle": "Connect {channel}",
+	"agents.channels.modal.editTitle": "Edit {channel}",
+	"agents.channels.modal.backToChannels": "Back to channels",
+	"agents.channels.modal.description": "Choose a channel to connect to your agent. Channels allow your agent to receive messages and respond to events.",
+	"agents.channels.modal.connectDescription": "Connect your {channel} account"
 }
