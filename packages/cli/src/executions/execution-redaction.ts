@@ -36,6 +36,13 @@ export type RedactableExecution = {
 	id?: string;
 	mode: WorkflowExecuteMode;
 	workflowId: string;
+	/**
+	 * ID of the user the execution ran as. `null` when no user can be attributed
+	 * (e.g. a schedule trigger fires without a specific user). The redaction layer
+	 * uses this to grant the owner access to their own data on executions that
+	 * resolved private credentials, where everyone else is still redacted.
+	 */
+	executedByUserId?: string | null;
 	data: Pick<IRunExecutionData, 'resultData' | 'executionData' | 'redactionInfo'>;
 	workflowData: Pick<IWorkflowBase, 'settings' | 'nodes'>;
 };

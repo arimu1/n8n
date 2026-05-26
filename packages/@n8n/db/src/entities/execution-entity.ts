@@ -17,6 +17,7 @@ import { DateTimeColumn, datetimeColumnType, jsonColumnType } from './abstract-e
 import type { ExecutionAnnotation } from './execution-annotation.ee';
 import type { ExecutionData } from './execution-data';
 import type { ExecutionMetadata } from './execution-metadata';
+import type { User } from './user';
 import { WorkflowEntity } from './workflow-entity';
 import { idStringifier } from '../utils/transformers';
 
@@ -98,6 +99,18 @@ export class ExecutionEntity {
 	 */
 	@Column({ type: 'varchar', length: 255, nullable: true })
 	deduplicationKey: string | null;
+
+	/**
+	 * ID of the user the execution ran as. Used by the redaction layer so the
+	 * owner of an execution that resolved private credentials can see their own
+	 * data while other viewers see redaction. `null` when no user can be
+	 * attributed (e.g. a schedule trigger fires without a specific user).
+	 */
+	@Column({ type: 'uuid', nullable: true })
+	executedByUserId: string | null;
+
+	@ManyToOne('User', { onDelete: 'SET NULL' })
+	executedByUser: Relation<User> | null;
 
 	@OneToMany('ExecutionMetadata', 'execution')
 	metadata: ExecutionMetadata[];

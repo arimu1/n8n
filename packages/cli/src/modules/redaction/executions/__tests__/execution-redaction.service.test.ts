@@ -56,6 +56,7 @@ describe('ExecutionRedactionService', () => {
 			workflowSettingsPolicy?: 'none' | 'all' | 'non-manual';
 			withRuntimeData?: boolean;
 			withDynamicCredentials?: boolean;
+			executedByUserId?: string | null;
 		} = {},
 	): RedactableExecution => {
 		const {
@@ -65,6 +66,7 @@ describe('ExecutionRedactionService', () => {
 			workflowSettingsPolicy,
 			withRuntimeData = true,
 			withDynamicCredentials = false,
+			executedByUserId = null,
 		} = overrides;
 
 		const executionData: IRunExecutionData['executionData'] = {
@@ -102,6 +104,7 @@ describe('ExecutionRedactionService', () => {
 			id: 'execution-123',
 			mode,
 			workflowId,
+			executedByUserId,
 			data: {
 				version: 1,
 				resultData: { runData },
@@ -671,6 +674,109 @@ describe('ExecutionRedactionService', () => {
 			await service.processExecution(execution, { user: mockUser });
 
 			// Credentials must be scrubbed from the response
+			expect(execution.data.executionData?.runtimeData?.credentials).toBeUndefined();
+		});
+	});
+
+	describe('dynamic credentials owner access', () => {
+		it('skips force redaction when requesting user ran the execution', async () => {
+			const execution = makeExecution({
+				policy: 'none',
+				mode: 'manual',
+				withDynamicCredentials: true,
+				executedByUserId: mockUser.id,
+			});
+
+			await service.processExecution(execution, { user: mockUser });
+
+			expect(fullItemRedactionStrategy.apply).not.toHaveBeenCalled();
+		});
+
+		it('still force-redacts when a different user requested the data', async () => {
+			const execution = makeExecution({
+				policy: 'none',
+				mode: 'manual',
+				withDynamicCredentials: true,
+				executedByUserId: 'another-user-id',
+			});
+
+			await service.processExecution(execution, { user: mockUser });
+
+			expect(fullItemRedactionStrategy.apply).toHaveBeenCalledTimes(1);
+		});
+
+		it('still force-redacts when the execution has no recorded executing user', async () => {
+			const execution = makeExecution({
+				policy: 'none',
+				mode: 'manual',
+				withDynamicCredentials: true,
+				executedByUserId: null,
+			});
+
+			await service.processExecution(execution, { user: mockUser });
+
+			expect(fullItemRedactionStrategy.apply).toHaveBeenCalledTimes(1);
+		});
+
+		it('allows the executing user to reveal their own data', async () => {
+			const execution = makeExecution({
+				policy: 'none',
+				mode: 'manual',
+				withDynamicCredentials: true,
+				executedByUserId: mockUser.id,
+			});
+
+			await expect(
+				service.processExecution(execution, { user: mockUser, redactExecutionData: false }),
+			).resolves.toBeDefined();
+		});
+
+		it('rejects reveal for a different user even with execution:reveal scope', async () => {
+			workflowFinderService.findWorkflowIdsWithScopeForUser.mockResolvedValue(
+				new Set(['workflow-123']),
+			);
+			const execution = makeExecution({
+				policy: 'none',
+				mode: 'manual',
+				withDynamicCredentials: true,
+				executedByUserId: 'another-user-id',
+			});
+
+			await expect(
+				service.processExecution(execution, { user: mockUser, redactExecutionData: false }),
+			).rejects.toThrow(ForbiddenError);
+		});
+
+		it('rejects reveal when no executing user is recorded, regardless of scope', async () => {
+			workflowFinderService.findWorkflowIdsWithScopeForUser.mockResolvedValue(
+				new Set(['workflow-123']),
+			);
+			const execution = makeExecution({
+				policy: 'none',
+				mode: 'manual',
+				withDynamicCredentials: true,
+				executedByUserId: null,
+			});
+
+			await expect(
+				service.processExecution(execution, { user: mockUser, redactExecutionData: false }),
+			).rejects.toThrow(ForbiddenError);
+		});
+
+		it('still scrubs runtimeData.credentials when the owner views their data', async () => {
+			const execution = makeExecution({
+				policy: 'none',
+				mode: 'manual',
+				withDynamicCredentials: true,
+				executedByUserId: mockUser.id,
+			});
+
+			expect(execution.data.executionData?.runtimeData?.credentials).toBe(
+				'encrypted-credential-context',
+			);
+
+			await service.processExecution(execution, { user: mockUser });
+
 			expect(execution.data.executionData?.runtimeData?.credentials).toBeUndefined();
 		});
 	});

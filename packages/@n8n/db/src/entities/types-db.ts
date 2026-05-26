@@ -67,6 +67,7 @@ export interface IExecutionBase {
 	 */
 	tracingContext?: { traceparent: string; tracestate?: string } | null;
 	deduplicationKey?: string | null; // see `ExecutionEntity.deduplicationKey`
+	executedByUserId?: string | null; // see `ExecutionEntity.executedByUserId`
 }
 
 // Required by PublicUser
