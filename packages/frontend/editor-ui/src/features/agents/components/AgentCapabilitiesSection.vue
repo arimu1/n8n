@@ -251,6 +251,19 @@ function openChannelEdit(channelType: string) {
 	channelModalView.value = `${channelType}_edit` as ChannelView;
 	channelModalOpen.value = true;
 }
+
+function handleChannelConnected(channelType: string) {
+	const triggers = Array.from(new Set([...props.connectedTriggers, channelType]));
+	emit('update:connected-triggers', triggers);
+	emit('trigger-added', { triggerType: channelType, triggers });
+}
+
+function handleChannelDisconnected(channelType: string) {
+	emit(
+		'update:connected-triggers',
+		props.connectedTriggers.filter((trigger) => trigger !== channelType),
+	);
+}
 </script>
 
 <template>
@@ -418,6 +431,8 @@ function openChannelEdit(channelType: string) {
 		:agent-id="agentId"
 		:project-id="projectId"
 		:connected-channels="connectedTriggers"
+		@channel-connected="handleChannelConnected"
+		@channel-disconnected="handleChannelDisconnected"
 	/>
 </template>
 
