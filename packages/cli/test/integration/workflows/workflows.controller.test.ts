@@ -224,6 +224,7 @@ describe('POST /workflows', () => {
 		expect(id).toBeDefined();
 		expect(scopes).toEqual(
 			[
+				'execution:reveal',
 				'workflow:delete',
 				'workflow:execute',
 				'workflow:execute-chat',
@@ -234,6 +235,7 @@ describe('POST /workflows', () => {
 				'workflow:unpublish',
 				'workflow:unshare',
 				'workflow:update',
+				'workflow:updateRedactionSetting',
 			].sort(),
 		);
 	});
@@ -1130,6 +1132,7 @@ describe('GET /workflows', () => {
 			expect(wf1.id).toBe(savedWorkflow1.id);
 			expect(wf1.scopes).toEqual(
 				[
+					'execution:reveal',
 					'workflow:delete',
 					'workflow:execute',
 					'workflow:execute-chat',
@@ -1138,6 +1141,7 @@ describe('GET /workflows', () => {
 					'workflow:read',
 					'workflow:unpublish',
 					'workflow:update',
+					'workflow:updateRedactionSetting',
 				].sort(),
 			);
 
@@ -1181,6 +1185,7 @@ describe('GET /workflows', () => {
 			expect(wf2.id).toBe(savedWorkflow2.id);
 			expect(wf2.scopes).toEqual(
 				[
+					'execution:reveal',
 					'workflow:delete',
 					'workflow:execute',
 					'workflow:execute-chat',
@@ -1191,6 +1196,7 @@ describe('GET /workflows', () => {
 					'workflow:unpublish',
 					'workflow:unshare',
 					'workflow:update',
+					'workflow:updateRedactionSetting',
 				].sort(),
 			);
 		}
@@ -2300,6 +2306,7 @@ describe('GET /workflows?includeFolders=true', () => {
 			expect(wf1.id).toBe(savedWorkflow1.id);
 			expect(wf1.scopes).toEqual(
 				[
+					'execution:reveal',
 					'workflow:delete',
 					'workflow:execute',
 					'workflow:execute-chat',
@@ -2308,6 +2315,7 @@ describe('GET /workflows?includeFolders=true', () => {
 					'workflow:read',
 					'workflow:unpublish',
 					'workflow:update',
+					'workflow:updateRedactionSetting',
 				].sort(),
 			);
 
@@ -2356,6 +2364,7 @@ describe('GET /workflows?includeFolders=true', () => {
 			expect(wf2.id).toBe(savedWorkflow2.id);
 			expect(wf2.scopes).toEqual(
 				[
+					'execution:reveal',
 					'workflow:delete',
 					'workflow:execute',
 					'workflow:execute-chat',
@@ -2366,6 +2375,7 @@ describe('GET /workflows?includeFolders=true', () => {
 					'workflow:unpublish',
 					'workflow:unshare',
 					'workflow:update',
+					'workflow:updateRedactionSetting',
 				].sort(),
 			);
 
@@ -3594,6 +3604,63 @@ describe('PATCH /workflows/:workflowId', () => {
 		const dbWorkflow = await workflowRepository.findOneBy({ id: workflow.id });
 
 		expect(dbWorkflow?.settings).toMatchObject({ redactionPolicy: 'all' });
+	});
+
+	test('should strip redactionPolicy on update when user lacks workflow:updateRedactionSetting scope', async () => {
+		testServer.license.enable('feat:dataRedaction');
+
+		const customRole = await createCustomRoleWithScopeSlugs(
+			['workflow:read', 'workflow:update', 'workflow:create'],
+			{
+				roleType: 'project',
+				displayName: 'Workflow Updater No Redaction',
+				description: 'Can update workflows but not change redaction policy',
+			},
+		);
+
+		const teamProject = await createTeamProject('Redaction Update Test Project', owner);
+		await linkUserToProject(member, teamProject, customRole.slug);
+
+		const workflow = await createWorkflowWithHistory(
+			{ settings: { redactionPolicy: 'none' } },
+			teamProject,
+		);
+
+		const response = await authMemberAgent
+			.patch(`/workflows/${workflow.id}`)
+			.send({ settings: { redactionPolicy: 'all' } });
+
+		expect(response.statusCode).toBe(200);
+
+		const dbWorkflow = await workflowRepository.findOneBy({ id: workflow.id });
+		expect(dbWorkflow?.settings?.redactionPolicy).toBe('none');
+	});
+
+	test('member can enable and disable redactionPolicy on a workflow in their own personal project', async () => {
+		testServer.license.enable('feat:dataRedaction');
+
+		const workflow = await createWorkflowWithHistory(
+			{ settings: { redactionPolicy: 'none' } },
+			member,
+		);
+
+		const enableResponse = await authMemberAgent
+			.patch(`/workflows/${workflow.id}`)
+			.send({ settings: { redactionPolicy: 'all' } });
+
+		expect(enableResponse.statusCode).toBe(200);
+		expect(
+			(await workflowRepository.findOneBy({ id: workflow.id }))?.settings?.redactionPolicy,
+		).toBe('all');
+
+		const disableResponse = await authMemberAgent
+			.patch(`/workflows/${workflow.id}`)
+			.send({ settings: { redactionPolicy: 'none' } });
+
+		expect(disableResponse.statusCode).toBe(200);
+		expect(
+			(await workflowRepository.findOneBy({ id: workflow.id }))?.settings?.redactionPolicy,
+		).toBe('none');
 	});
 });
 
