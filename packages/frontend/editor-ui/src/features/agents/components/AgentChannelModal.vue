@@ -359,9 +359,9 @@ watch(
 			</Transition>
 		</div>
 
-		<N8nDialogFooter>
-			<Transition name="channel-footer-fade" mode="out-in">
-				<div v-if="showFooterActions" key="actions" :class="$style.footer">
+		<Transition name="channel-footer-fade">
+			<N8nDialogFooter v-if="showFooterActions" :class="$style.customFooter">
+				<div :class="$style.footer">
 					<N8nButton variant="ghost" size="medium" @click="closeModal">
 						{{ i18n.baseText('generic.cancel') }}
 					</N8nButton>
@@ -375,9 +375,8 @@ watch(
 						{{ i18n.baseText('generic.save') }}
 					</N8nButton>
 				</div>
-				<div v-else key="empty" :class="$style.footer"></div>
-			</Transition>
-		</N8nDialogFooter>
+			</N8nDialogFooter>
+		</Transition>
 	</N8nDialog>
 </template>
 
@@ -392,6 +391,7 @@ watch(
 	aspect-ratio: 4/3;
 	overflow-y: auto;
 	scrollbar-width: thin;
+	margin-bottom: calc(var(--spacing--lg) * -1);
 	scrollbar-color: transparent transparent;
 }
 
@@ -485,6 +485,15 @@ watch(
 	flex-direction: column;
 	gap: var(--spacing--md);
 	padding: var(--spacing--md) 0;
+}
+
+.customFooter {
+	position: absolute;
+	inset-inline: 0;
+	bottom: 0;
+	padding: var(--spacing--md) var(--spacing--lg);
+	border-top: var(--border);
+	background: light-dark(var(--color--neutral-white), var(--color--neutral-800));
 }
 
 .footer {
