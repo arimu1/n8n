@@ -6409,5 +6409,6 @@
 	"agents.channels.modal.editTitle": "Edit {channel}",
 	"agents.channels.modal.backToChannels": "Back to channels",
 	"agents.channels.modal.description": "Choose a channel to connect to your agent. Channels allow your agent to receive messages and respond to events.",
-	"agents.channels.modal.connectDescription": "Connect your {channel} account"
+	"agents.channels.modal.connectDescription": "Connect your {channel} account",
+	"agents.channels.modal.connected": "Connected"
 }
