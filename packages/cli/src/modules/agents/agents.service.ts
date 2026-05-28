@@ -19,6 +19,7 @@ import {
 	type AgentCredentialIntegrationConfig,
 	type AgentIntegrationConfig,
 	type AgentJsonConfig,
+	type AgentJsonMcpServerConfig,
 	type AgentJsonMemoryConfig,
 	type AgentJsonToolConfig,
 	type AgentSkill,
@@ -55,6 +56,7 @@ import { ConflictError } from '@/errors/response-errors/conflict.error';
 import { NotFoundError } from '@/errors/response-errors/not-found.error';
 import { resolveBuiltinNodeDefinitionDirs } from '@/modules/instance-ai/node-definition-resolver';
 import { EphemeralNodeExecutor } from '@/node-execution';
+import { OauthService } from '@/oauth/oauth.service';
 import type { PubSubCommandMap } from '@/scaling/pubsub/pubsub.event-map';
 import { Publisher } from '@/scaling/pubsub/publisher.service';
 import { UrlService } from '@/services/url.service';
@@ -72,6 +74,7 @@ import { AgentExecutionService } from './agent-execution.service';
 import { AgentSkillsService } from './agent-skills.service';
 import { AgentsToolsService } from './agents-tools.service';
 import { AGENT_THREAD_PREFIX } from './builder/builder-tool-names';
+import { LLM_PROVIDER_DEFAULTS } from './builder/interactive/llm-provider-defaults';
 import { Agent } from './entities/agent.entity';
 import { ExecutionRecorder } from './execution-recorder';
 import { ChatIntegrationRegistry } from './integrations/agent-chat-integration';
@@ -84,6 +87,7 @@ import {
 	type MemoryFactory,
 	type ToolResolver,
 } from './json-config/from-json-config';
+import { buildMcpClientForServer } from './json-config/mcp-client-factory';
 import { AgentHistoryRepository } from './repositories/agent-history.repository';
 import { AgentRepository } from './repositories/agent.repository';
 import { AgentSecureRuntime } from './runtime/agent-secure-runtime';
@@ -230,7 +234,9 @@ export class AgentsService {
 	private clearRuntimes(agentId: string, options: { skipBroadcast?: boolean } = {}): void {
 		for (const key of this.runtimes.keys()) {
 			if (key === agentId || key.startsWith(`${agentId}:`)) {
+				const entry = this.runtimes.get(key);
 				this.runtimes.delete(key);
+				if (entry) this.closeAgentResources(entry.agent, agentId);
 			}
 		}
 
@@ -285,10 +291,29 @@ export class AgentsService {
 		private readonly globalConfig: GlobalConfig,
 		private readonly telemetry: Telemetry,
 		private readonly chatIntegrationService: ChatIntegrationService,
+		private readonly oauthService: OauthService,
 	) {}
 
 	private isNodeToolsModuleEnabled(): boolean {
 		return this.agentsConfig.modules.includes('node-tools-searcher');
+	}
+
+	private isMcpModuleEnabled(): boolean {
+		return this.agentsConfig.modules.includes('mcp');
+	}
+
+	/**
+	 * Best-effort close of an agent instance. Delegates to `agent.close()`
+	 * which disposes the runtime and disconnects any attached MCP clients.
+	 * Errors are logged but never thrown.
+	 */
+	private closeAgentResources(agent: { close(): Promise<void> }, agentId: string): void {
+		agent.close().catch((error) => {
+			this.logger.warn('[AgentsService] Failed to close agent resources on eviction', {
+				agentId,
+				error: error instanceof Error ? error.message : String(error),
+			});
+		});
 	}
 
 	private createAgentExecutionCounter({
@@ -997,6 +1022,8 @@ export class AgentsService {
 	 *                     a real credential in the project
 	 *   - "episodicMemory.credential": configured Episodic Memory credential
 	 *                     does not resolve to a real credential in the project
+	 *   - "memory.*.*Model.credential": configured memory worker model
+	 *                     credential does not resolve or does not match the model provider
 	 *   - "skill:<id>":   config references a skill id with no stored body
 	 */
 	async validateAgentIsRunnable(
@@ -1025,9 +1052,12 @@ export class AgentsService {
 		}
 
 		let credentialList: Awaited<ReturnType<CredentialProvider['list']>> | undefined;
-		const credentialExists = async (credentialId: string) => {
+		const findCredential = async (credentialId: string) => {
 			credentialList ??= await credentialProvider.list();
-			return credentialList.some((credential) => credential.id === credentialId);
+			return credentialList.find((credential) => credential.id === credentialId);
+		};
+		const credentialExists = async (credentialId: string) => {
+			return (await findCredential(credentialId)) !== undefined;
 		};
 
 		if (!config.credential?.trim()) {
@@ -1043,14 +1073,60 @@ export class AgentsService {
 		}
 
 		const episodicMemory = config.memory?.episodicMemory;
-		if (config.memory?.enabled && episodicMemory?.enabled === true) {
+		if (config.memory?.enabled) {
 			try {
-				if (!(await credentialExists(episodicMemory.credential.trim()))) {
-					missing.push('episodicMemory.credential');
+				await this.validateMemoryWorkerModel(
+					config.memory.observationalMemory?.observerModel,
+					'memory.observationalMemory.observerModel',
+					findCredential,
+					missing,
+				);
+				await this.validateMemoryWorkerModel(
+					config.memory.observationalMemory?.reflectorModel,
+					'memory.observationalMemory.reflectorModel',
+					findCredential,
+					missing,
+				);
+				if (episodicMemory?.enabled === true) {
+					if (!(await credentialExists(episodicMemory.credential.trim()))) {
+						missing.push('episodicMemory.credential');
+					}
+					await this.validateMemoryWorkerModel(
+						episodicMemory.extractorModel,
+						'memory.episodicMemory.extractorModel',
+						findCredential,
+						missing,
+					);
+					await this.validateMemoryWorkerModel(
+						episodicMemory.reflectorModel,
+						'memory.episodicMemory.reflectorModel',
+						findCredential,
+						missing,
+					);
 				}
 			} catch {
 				// Same behavior as the main model credential: runtime reconstruction
 				// surfaces permission/listing failures with the concrete error.
+			}
+		}
+
+		const webSearch = config.config?.webSearch;
+		if (
+			webSearch?.enabled &&
+			(webSearch.provider === 'brave' || webSearch.provider === 'searxng')
+		) {
+			const webSearchCredentialId = webSearch.credential?.trim();
+			if (!webSearchCredentialId) {
+				missing.push('webSearch.credential');
+			} else {
+				try {
+					if (!(await credentialExists(webSearchCredentialId))) {
+						missing.push('webSearch.credential');
+					}
+				} catch {
+					// Keep the same behavior as other credential checks: runtime execution
+					// surfaces list/permission failures with the concrete error.
+				}
 			}
 		}
 
@@ -1061,6 +1137,44 @@ export class AgentsService {
 		);
 
 		return { missing };
+	}
+
+	private async validateMemoryWorkerModel(
+		modelConfig: { model?: string | null; credential?: string | null } | string | null | undefined,
+		path: string,
+		findCredential: (
+			credentialId: string,
+		) => Promise<Awaited<ReturnType<CredentialProvider['list']>>[number] | undefined>,
+		missing: string[],
+	) {
+		if (modelConfig === undefined || modelConfig === null) return;
+
+		if (typeof modelConfig === 'string') {
+			missing.push(`${path}.credential`);
+			return;
+		}
+
+		if (!modelConfig.model?.trim() || !AgentModelSchema.safeParse(modelConfig.model).success) {
+			missing.push(`${path}.model`);
+		}
+
+		const credentialId = modelConfig.credential?.trim();
+		if (!credentialId) {
+			missing.push(`${path}.credential`);
+			return;
+		}
+
+		const credential = await findCredential(credentialId);
+		if (
+			!credential ||
+			!this.workerCredentialSupportsModel(credential.type, modelConfig.model ?? '')
+		) {
+			missing.push(`${path}.credential`);
+		}
+	}
+
+	private workerCredentialSupportsModel(credentialType: string, model: string) {
+		return LLM_PROVIDER_DEFAULTS[credentialType]?.provider === getProviderPrefix(model);
 	}
 
 	/**
@@ -1270,18 +1384,6 @@ export class AgentsService {
 		}
 	}
 
-	/**
-	 * Execute an SDK agent within a workflow execution context.
-	 *
-	 * Streams the run rather than calling `.generate()` so the same
-	 * `ExecutionRecorder` used by chat/Slack/schedule paths can collect a full
-	 * `MessageRecord` (timeline, tool calls, usage). Without this, sessions
-	 * triggered from a workflow node never appear in the agent's session list
-	 * because nothing creates the agent execution thread row.
-	 *
-	 * Compiles a fresh isolated agent per call for credential isolation (does
-	 * not use or affect the shared runtime cache).
-	 */
 	async executeForWorkflow(
 		agentId: string,
 		message: string,
@@ -1449,6 +1551,22 @@ export class AgentsService {
 			};
 		}
 
+		const mcpServers = config.mcpServers ?? [];
+		if (mcpServers.length > 0 && !this.isMcpModuleEnabled()) {
+			return {
+				valid: false,
+				error: 'MCP servers require the "mcp" agents module to be enabled.',
+			};
+		}
+		for (const server of mcpServers) {
+			if (server.authentication !== 'none' && !server.credential) {
+				return {
+					valid: false,
+					error: `MCP server "${server.name}" requires a credential when authentication is not "none".`,
+				};
+			}
+		}
+
 		try {
 			this.validateNodeToolExpressions(config);
 		} catch (error) {
@@ -1516,6 +1634,7 @@ export class AgentsService {
 		const memoryProvided = result.config.memory !== undefined;
 		const providerToolsProvided = result.config.providerTools !== undefined;
 		const configBlockProvided = result.config.config !== undefined;
+		const mcpServersProvided = result.config.mcpServers !== undefined;
 
 		const { schemaConfig: decomposedSchema, integrations: decomposedIntegrations } =
 			decomposeJsonConfig(result.config);
@@ -1537,6 +1656,7 @@ export class AgentsService {
 			...(skillsProvided ? { skills: decomposedSchema.skills } : {}),
 			...(providerToolsProvided ? { providerTools: decomposedSchema.providerTools } : {}),
 			...(configBlockProvided ? { config: decomposedSchema.config } : {}),
+			...(mcpServersProvided ? { mcpServers: decomposedSchema.mcpServers } : {}),
 		};
 
 		entity.schema = nextSchema;
@@ -1906,6 +2026,19 @@ export class AgentsService {
 
 		const resolvedTools: BuiltTool[] = [];
 
+		// Only attach MCP clients when the module is enabled. Without the gate
+		// a previously-configured agent would still build live MCP connections
+		// after the operator removes the token from N8N_AGENTS_MODULES, which
+		// undermines the kill-switch.
+		const buildMcpClient = this.isMcpModuleEnabled()
+			? async (server: AgentJsonMcpServerConfig) =>
+					await buildMcpClientForServer(server, {
+						credentialProvider,
+						oauthService: this.oauthService,
+						projectId: agentEntity.projectId,
+					})
+			: undefined;
+
 		const reconstructed = await buildFromJson(config, toolDescriptors, {
 			toolExecutor,
 			credentialProvider,
@@ -1916,6 +2049,7 @@ export class AgentsService {
 			},
 			skills: agentEntity.skills ?? {},
 			memoryFactory: this.getMemoryFactory(agentEntity.id),
+			buildMcpClient,
 		});
 
 		await this.injectRuntimeDependencies({
@@ -1931,4 +2065,9 @@ export class AgentsService {
 		const toolRegistry = buildToolRegistry(resolvedTools);
 		return { agent: reconstructed, toolRegistry };
 	}
+}
+
+function getProviderPrefix(modelId: string): string {
+	const slashIdx = modelId.indexOf('/');
+	return slashIdx === -1 ? '' : modelId.slice(0, slashIdx);
 }
