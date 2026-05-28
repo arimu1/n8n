@@ -61,7 +61,7 @@ export class OAuth1CredentialController {
 			const oauthTokenData = Object.fromEntries(paramParser.entries());
 
 			if (!state.origin || state.origin === 'static-credential') {
-				await this.oauthService.encryptAndSaveData(credential, { oauthTokenData }, ['csrfSecret']);
+				await this.oauthService.encryptAndSaveData(credential, { oauthTokenData });
 
 				this.logger.debug('OAuth1 callback successful for new credential', {
 					credentialId: credential.id,

@@ -105,6 +105,7 @@ describe('OAuth1CredentialController', () => {
 				{ csrfSecret: 'invalid' },
 				{ accessTokenUrl: 'https://example.domain/oauth/access_token' },
 				mockState,
+				{ csrfSecret: 'csrf-secret' },
 			]);
 			jest
 				.mocked(axios.post)
@@ -120,7 +121,6 @@ describe('OAuth1CredentialController', () => {
 						oauth_token_secret: 'secret',
 					}),
 				}),
-				['csrfSecret'],
 			);
 			expect(res.render).toHaveBeenCalledWith('oauth-callback');
 		});
@@ -150,6 +150,7 @@ describe('OAuth1CredentialController', () => {
 				{ csrfSecret: 'invalid' },
 				{ accessTokenUrl: 'https://example.domain/oauth/access_token' },
 				mockState,
+				{ csrfSecret: 'csrf-secret' },
 			]);
 			jest
 				.mocked(axios.post)
@@ -196,6 +197,7 @@ describe('OAuth1CredentialController', () => {
 				{ csrfSecret: 'invalid' },
 				{ accessTokenUrl: 'https://example.domain/oauth/access_token' },
 				mockState,
+				{ csrfSecret: 'csrf-secret' },
 			]);
 			jest
 				.mocked(axios.post)
@@ -234,6 +236,7 @@ describe('OAuth1CredentialController', () => {
 				{ csrfSecret: 'invalid' },
 				{ accessTokenUrl: 'https://example.domain/oauth/access_token' },
 				mockState,
+				{ csrfSecret: 'csrf-secret' },
 			]);
 			jest
 				.mocked(axios.post)
@@ -273,6 +276,7 @@ describe('OAuth1CredentialController', () => {
 				{ csrfSecret: 'invalid' },
 				{ accessTokenUrl: 'https://example.domain/oauth/access_token' },
 				mockState,
+				{ csrfSecret: 'csrf-secret' },
 			]);
 			jest
 				.mocked(axios.post)
@@ -310,6 +314,7 @@ describe('OAuth1CredentialController', () => {
 				{ csrfSecret: 'invalid' },
 				{ accessTokenUrl: 'https://example.domain/oauth/access_token' },
 				mockState,
+				{ csrfSecret: 'csrf-secret' },
 			]);
 			jest
 				.mocked(axios.post)
@@ -325,7 +330,6 @@ describe('OAuth1CredentialController', () => {
 						oauth_token_secret: 'secret',
 					}),
 				}),
-				['csrfSecret'],
 			);
 			expect(res.render).toHaveBeenCalledWith('oauth-callback');
 		});
