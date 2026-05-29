@@ -35,10 +35,8 @@ const props = withDefaults(
 const emit = defineEmits<{
 	'open-tool': [target: ToolOpenTarget];
 	'open-skill': [id: string];
-	'open-trigger': [triggerType: string];
 	'add-tool': [];
 	'add-skill': [];
-	'add-trigger': [];
 	'remove-tool': [index: number];
 	'remove-skill': [id: string];
 	'update:connected-triggers': [triggers: string[]];
@@ -426,6 +424,7 @@ function handleChannelDisconnected(channelType: string) {
 		</div>
 
 		<AgentChannelModal
+			v-if="channelModalOpen"
 			v-model:open="channelModalOpen"
 			v-model:view="channelModalView"
 			:agent-id="agentId"

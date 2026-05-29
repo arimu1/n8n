@@ -36,10 +36,8 @@ const emit = defineEmits<{
 	'update:config': [updates: Partial<AgentJsonConfig>];
 	'open-tool': [target: ToolOpenTarget];
 	'open-skill': [id: string];
-	'open-trigger': [triggerType: string];
 	'add-tool': [];
 	'add-skill': [];
-	'add-trigger': [];
 	'remove-tool': [index: number];
 	'remove-skill': [id: string];
 	'update:connected-triggers': [triggers: string[]];
@@ -98,10 +96,8 @@ const i18n = useI18n();
 							:is-published="Boolean(agent?.activeVersionId)"
 							@open-tool="emit('open-tool', $event)"
 							@open-skill="emit('open-skill', $event)"
-							@open-trigger="emit('open-trigger', $event)"
 							@add-tool="emit('add-tool')"
 							@add-skill="emit('add-skill')"
-							@add-trigger="emit('add-trigger')"
 							@remove-tool="emit('remove-tool', $event)"
 							@remove-skill="emit('remove-skill', $event)"
 							@update:connected-triggers="emit('update:connected-triggers', $event)"
