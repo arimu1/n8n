@@ -1014,6 +1014,7 @@ function onSwitchAgent(nextAgentId: string) {
 				@remove-skill="onRemoveSkill"
 				@update:connected-triggers="onConnectedTriggersUpdate"
 				@trigger-added="onTriggerAdded"
+				@agent-changed="refreshAgentAfterIntegrationChange"
 			/>
 		</div>
 	</div>

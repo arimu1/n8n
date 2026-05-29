@@ -41,6 +41,7 @@ const emit = defineEmits<{
 	'remove-skill': [id: string];
 	'update:connected-triggers': [triggers: string[]];
 	'trigger-added': [{ triggerType: string; triggers: string[] }];
+	'agent-changed': [];
 }>();
 
 const i18n = useI18n();
@@ -432,6 +433,7 @@ function handleChannelDisconnected(channelType: string) {
 			:connected-channels="connectedTriggers"
 			@channel-connected="handleChannelConnected"
 			@channel-disconnected="handleChannelDisconnected"
+			@agent-changed="emit('agent-changed')"
 		/>
 	</div>
 </template>

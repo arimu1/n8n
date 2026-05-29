@@ -42,6 +42,7 @@ const emit = defineEmits<{
 	'remove-skill': [id: string];
 	'update:connected-triggers': [triggers: string[]];
 	'trigger-added': [payload: { triggerType: string; triggers: string[] }];
+	'agent-changed': [];
 }>();
 
 const i18n = useI18n();
@@ -102,6 +103,7 @@ const i18n = useI18n();
 							@remove-skill="emit('remove-skill', $event)"
 							@update:connected-triggers="emit('update:connected-triggers', $event)"
 							@trigger-added="emit('trigger-added', $event)"
+							@agent-changed="emit('agent-changed')"
 						/>
 					</N8nCard>
 					<N8nCard variant="outlined" :class="$style.card">
