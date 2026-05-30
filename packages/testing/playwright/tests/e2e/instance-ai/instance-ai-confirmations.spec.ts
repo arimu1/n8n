@@ -3,8 +3,6 @@ import type { IWorkflowBase } from 'n8n-workflow';
 import { test, expect, instanceAiTestConfig } from './fixtures';
 
 test.use(instanceAiTestConfig);
-test.skip(true, 'Instance AI expectations are refreshed in the stacked recordings branch');
-
 const APPROVE_EDIT_WORKFLOW_NAME = 'INS-171 Approval Edit Target';
 const DENY_EDIT_WORKFLOW_NAME = 'INS-171 Deny Edit Target';
 const RESTORE_ARCHIVED_WORKFLOW_NAME = 'INS-199 Archived Restore Target';

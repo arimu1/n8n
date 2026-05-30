@@ -16,7 +16,6 @@ test.use({
 		},
 	},
 });
-test.skip(true, 'Instance AI expectations are refreshed in the stacked recordings branch');
 
 type TraceEvent = {
 	kind?: string;
