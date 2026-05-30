@@ -41,6 +41,51 @@ jest.mock('../submit-workflow.tool', () => ({
 }));
 
 describe('createBuildWorkflowTool', () => {
+	it('rejects new workflow saves outside an approved planned build', async () => {
+		const context = {
+			workflowService: {
+				createFromWorkflowJSON: jest.fn(async () => await Promise.resolve({ id: 'wf-1' })),
+			},
+			permissions: { createWorkflow: 'require_approval' },
+		} as unknown as InstanceAiContext;
+
+		const result = await executeTool<{ success: boolean; errors?: string[] }>(
+			createBuildWorkflowTool(context),
+			{ code: 'workflow code' },
+		);
+
+		expect(result.success).toBe(false);
+		expect(result.errors?.[0]).toContain('call `plan`');
+		expect(context.workflowService.createFromWorkflowJSON).not.toHaveBeenCalled();
+	});
+
+	it('suspends existing workflow edits before saving by default', async () => {
+		const context = {
+			workflowService: {
+				getAsWorkflowJSON: jest.fn(async () => await Promise.resolve({ name: 'Target workflow' })),
+				updateFromWorkflowJSON: jest.fn(),
+			},
+			permissions: { updateWorkflow: 'require_approval' },
+		} as unknown as InstanceAiContext;
+		const suspend = jest.fn(async () => await Promise.reject(new Error('suspended')));
+
+		await expect(
+			executeTool(
+				createBuildWorkflowTool(context),
+				{ workflowId: 'wf-1', code: 'workflow code' },
+				{ suspend },
+			),
+		).rejects.toThrow('suspended');
+
+		expect(suspend).toHaveBeenCalledWith(
+			expect.objectContaining({
+				message: 'Edit Target workflow (ID: wf-1)?',
+				severity: 'warning',
+			}),
+		);
+		expect(context.workflowService.updateFromWorkflowJSON).not.toHaveBeenCalled();
+	});
+
 	it('reports a workflow-loop outcome when saving succeeds', async () => {
 		const reportBuildOutcome = jest.fn(
 			async () => await Promise.resolve({ type: 'verify' as const, workflowId: 'wf-1' }),
